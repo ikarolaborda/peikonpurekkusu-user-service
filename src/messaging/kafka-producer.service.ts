@@ -52,7 +52,7 @@ export class KafkaProducerService implements OnModuleInit, OnModuleDestroy {
 
   async publish(topic: string, key: string, envelope: EventEnvelope): Promise<void> {
     const value = this.frame(await this.schemaId(topic), envelope);
-    await this.producer.send({
+    const send = this.producer.send({
       topic,
       messages: [
         {
@@ -62,6 +62,14 @@ export class KafkaProducerService implements OnModuleInit, OnModuleDestroy {
         },
       ],
     });
+    // A broker outage can leave send() pending indefinitely (observed with
+    // idempotent-PID acquisition during a Kafka restart), which would wedge
+    // the outbox relay's drain flag forever. Fail loudly; the relay retries.
+    const timeout = new Promise<never>((_, reject) => {
+      const t = setTimeout(() => reject(new Error(`kafka send timeout (${topic})`)), 15_000);
+      t.unref();
+    });
+    await Promise.race([send, timeout]);
   }
 
   private frame(schemaId: number, envelope: EventEnvelope): Buffer {
