@@ -1,0 +1,56 @@
+# Merged into the root docker-compose.yml by the integrator.
+services:
+  user-service:
+    build:
+      context: .
+      dockerfile: services/user-service/Dockerfile
+    restart: unless-stopped
+    networks: [edge, internal]
+    depends_on:
+      users-db:
+        condition: service_healthy
+      redis-session:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      apicurio-registry:
+        condition: service_healthy
+    environment:
+      USERS_DB_HOST: users-db
+      USERS_DB_PORT: 5432
+      USERS_DB_USER: ${USERS_DB_USER}
+      USERS_DB_PASSWORD: ${USERS_DB_PASSWORD}
+      USERS_DB_NAME: ${USERS_DB_NAME}
+      REDIS_SESSION_HOST: redis-session
+      REDIS_SESSION_PORT: 6379
+      REDIS_SESSION_PASSWORD: ${REDIS_SESSION_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      SCHEMA_REGISTRY_URL: http://apicurio-registry:8080/apis/ccompat/v7
+      JWT_ISSUER: ${JWT_ISSUER}
+      JWT_AUDIENCE: ${JWT_AUDIENCE}
+      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL}
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL}
+      JWT_PRIVATE_KEY_PATH: /secrets/jwt-es256-private.pem
+      JWT_KID_PATH: /secrets/jwt-es256.kid
+    volumes:
+      - ./secrets:/secrets:ro
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:8080/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=peikonpurekkusu_edge"
+      # /auth + /.well-known are public (no ForwardAuth — they ARE the authenticator)
+      - "traefik.http.routers.user-auth.rule=Host(`${API_HOST}`) && (PathPrefix(`/auth`) || PathPrefix(`/.well-known`))"
+      - "traefik.http.routers.user-auth.entrypoints=web"
+      - "traefik.http.routers.user-auth.middlewares=security-headers@file,api-ratelimit@file"
+      - "traefik.http.routers.user-auth.service=user-service"
+      # /users requires a verified session at the edge
+      - "traefik.http.routers.user-users.rule=Host(`${API_HOST}`) && PathPrefix(`/users`)"
+      - "traefik.http.routers.user-users.entrypoints=web"
+      - "traefik.http.routers.user-users.middlewares=security-headers@file,api-ratelimit@file,jwt-auth@file"
+      - "traefik.http.routers.user-users.service=user-service"
+      - "traefik.http.services.user-service.loadbalancer.server.port=8080"

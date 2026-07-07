@@ -1,0 +1,74 @@
+{
+  "name": "@peikon/user-service",
+  "version": "1.0.0",
+  "description": "peikonpurekkusu identity service — auth, JWT (ES256+JWKS), sessions, ForwardAuth",
+  "private": true,
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "start:dev": "nest start --watch",
+    "lint": "eslint \"src/**/*.ts\"",
+    "test": "jest",
+    "migration:create": "mikro-orm migration:create"
+  },
+  "dependencies": {
+    "@confluentinc/kafka-javascript": "1.10.0",
+    "@confluentinc/schemaregistry": "1.10.0",
+    "@mikro-orm/core": "7.1.5",
+    "@mikro-orm/migrations": "7.1.5",
+    "@mikro-orm/nestjs": "7.0.2",
+    "@mikro-orm/postgresql": "7.1.5",
+    "@nestjs/common": "11.1.27",
+    "@nestjs/config": "4.0.4",
+    "@nestjs/core": "11.1.27",
+    "@nestjs/platform-express": "11.1.27",
+    "@nestjs/terminus": "11.1.1",
+    "argon2": "0.44.0",
+    "class-transformer": "0.5.1",
+    "class-validator": "0.15.1",
+    "cookie-parser": "^1.4.7",
+    "jose": "6.2.3",
+    "redis": "6.1.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "11.0.23",
+    "@nestjs/testing": "11.1.27",
+    "@types/cookie-parser": "^1.4.9",
+    "@types/express": "^5.0.3",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.0.0",
+    "jest": "^30.0.0",
+    "ts-jest": "^29.4.0",
+    "typescript": "^5.8.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "argon2",
+      "@confluentinc/kafka-javascript"
+    ]
+  },
+  "jest": {
+    "moduleFileExtensions": ["js", "json", "ts"],
+    "rootDir": "src",
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.ts$": ["ts-jest", { "tsconfig": "<rootDir>/../tsconfig.spec.json" }]
+    },
+    "moduleNameMapper": {
+      "^@mikro-orm/core$": "<rootDir>/../test/stubs/mikro-orm-core.stub.cjs",
+      "^@mikro-orm/postgresql$": "<rootDir>/../test/stubs/mikro-orm-postgresql.stub.cjs",
+      "^jose$": "<rootDir>/../test/stubs/jose.stub.cjs",
+      "^redis$": "<rootDir>/../test/stubs/redis.stub.cjs",
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    },
+    "testEnvironment": "node"
+  }
+}
