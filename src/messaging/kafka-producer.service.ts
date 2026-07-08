@@ -18,22 +18,27 @@ import type { EventEnvelope } from './event-envelope.factory.js';
 @Injectable()
 export class KafkaProducerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(KafkaProducerService.name);
+  private readonly kafka: KafkaJS.Kafka;
   private producer: KafkaJS.Producer;
   private readonly registryUrl: string;
   private readonly schemaIds = new Map<string, number>();
   private connected = false;
+  private consecutiveTimeouts = 0;
+  private reconnecting = false;
 
   constructor(config: ConfigService) {
-    const kafka = new KafkaJS.Kafka({
+    this.kafka = new KafkaJS.Kafka({
       kafkaJS: {
         clientId: 'user-service',
         brokers: config.getOrThrow<string>('KAFKA_BOOTSTRAP_SERVERS').split(','),
       },
     });
-    this.producer = kafka.producer({
-      kafkaJS: { acks: -1, idempotent: true },
-    });
+    this.producer = this.newProducer();
     this.registryUrl = config.getOrThrow<string>('SCHEMA_REGISTRY_URL').replace(/\/$/, '');
+  }
+
+  private newProducer(): KafkaJS.Producer {
+    return this.kafka.producer({ kafkaJS: { acks: -1, idempotent: true } });
   }
 
   async onModuleInit(): Promise<void> {
@@ -48,6 +53,33 @@ export class KafkaProducerService implements OnModuleInit, OnModuleDestroy {
 
   isConnected(): boolean {
     return this.connected;
+  }
+
+  /**
+   * Self-heal a stale producer. librdkafka usually reconnects on its own, but
+   * a broker restart can leave the idempotent producer unable to re-acquire
+   * its PID — every send then times out. After a few consecutive timeouts we
+   * recreate the producer so the outbox relay can drain instead of wedging.
+   */
+  private async recoverIfStale(): Promise<void> {
+    if (this.reconnecting || this.consecutiveTimeouts < 3) return;
+    this.reconnecting = true;
+    try {
+      this.logger.warn('recreating kafka producer after repeated send timeouts');
+      try {
+        await this.producer.disconnect();
+      } catch {
+        /* best effort */
+      }
+      this.producer = this.newProducer();
+      await this.producer.connect();
+      this.consecutiveTimeouts = 0;
+      this.logger.log('kafka producer reconnected');
+    } catch (err) {
+      this.logger.error(`producer reconnect failed: ${(err as Error).message}`);
+    } finally {
+      this.reconnecting = false;
+    }
   }
 
   async publish(topic: string, key: string, envelope: EventEnvelope): Promise<void> {
@@ -69,7 +101,16 @@ export class KafkaProducerService implements OnModuleInit, OnModuleDestroy {
       const t = setTimeout(() => reject(new Error(`kafka send timeout (${topic})`)), 15_000);
       t.unref();
     });
-    await Promise.race([send, timeout]);
+    try {
+      await Promise.race([send, timeout]);
+      this.consecutiveTimeouts = 0;
+    } catch (err) {
+      if ((err as Error).message.includes('send timeout')) {
+        this.consecutiveTimeouts += 1;
+        void this.recoverIfStale();
+      }
+      throw err;
+    }
   }
 
   private frame(schemaId: number, envelope: EventEnvelope): Buffer {
