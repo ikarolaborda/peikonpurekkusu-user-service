@@ -1,7 +1,7 @@
 {
   "name": "@peikon/user-service",
   "version": "1.0.0",
-  "description": "peikonpurekkusu identity service — auth, JWT (ES256+JWKS), sessions, ForwardAuth",
+  "description": "peikonpurekkusu identity service \u2014 auth, JWT (ES256+JWKS), sessions, ForwardAuth",
   "private": true,
   "license": "UNLICENSED",
   "packageManager": "pnpm@9.15.0",
@@ -63,7 +63,7 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.ts$": [
+      "^.+\\.(t|j)s$": [
         "ts-jest",
         {
           "tsconfig": "<rootDir>/../tsconfig.spec.json"
@@ -73,10 +73,13 @@
     "moduleNameMapper": {
       "^@mikro-orm/core$": "<rootDir>/../test/stubs/mikro-orm-core.stub.cjs",
       "^@mikro-orm/postgresql$": "<rootDir>/../test/stubs/mikro-orm-postgresql.stub.cjs",
-      "^jose$": "<rootDir>/../test/stubs/jose.stub.cjs",
       "^redis$": "<rootDir>/../test/stubs/redis.stub.cjs",
       "^(\\.{1,2}/.*)\\.js$": "$1"
     },
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "transformIgnorePatterns": [
+      "node_modules/(?!\\.pnpm)(?!jose)",
+      "node_modules/\\.pnpm/(?!jose@)"
+    ]
   }
 }

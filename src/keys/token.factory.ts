@@ -47,7 +47,7 @@ export class TokenFactory {
       amr: claims.amr,
       auth_time: claims.auth_time,
     })
-      .setProtectedHeader({ alg: 'ES256', kid: this.keys.kid })
+      .setProtectedHeader({ alg: 'ES256', typ: 'JWT', kid: this.keys.kid })
       .setSubject(claims.sub)
       .setJti(jti)
       .setIssuer(this.issuer)
@@ -60,11 +60,18 @@ export class TokenFactory {
   }
 
   /**
-   * Verifies one of our own tokens. Algorithm allow-list is pinned — header
-   * key sources (jku/jwk/x5u) are never honored by jose's key-object path.
+   * Verifies one of our own tokens against the key ring, selected by the
+   * token's kid — a pre-rotation token stays valid while its key is retired
+   * (not revoked). Algorithm allow-list is pinned — header key sources
+   * (jku/jwk/x5u) are never honored by jose's JWKS path.
    */
   async verifyAccessToken(token: string): Promise<jose.JWTPayload> {
-    const { payload } = await jose.jwtVerify(token, await this.keys.verificationKey(), {
+    // createLocalJWKSet falls back to kty-matching when kid is absent, which
+    // would make acceptance ambiguous during rotation — require kid outright.
+    if (!jose.decodeProtectedHeader(token).kid) {
+      throw new jose.errors.JWTInvalid('missing kid header');
+    }
+    const { payload } = await jose.jwtVerify(token, this.keys.verificationKeys(), {
       algorithms: ['ES256'],
       issuer: this.issuer,
       audience: this.audience,

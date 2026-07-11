@@ -25,6 +25,7 @@ export class Env {
   @IsInt() @Min(3600) REFRESH_TOKEN_TTL: number = 1209600;
 
   @IsString() JWT_PRIVATE_KEY_PATH: string = '/secrets/jwt-es256-private.pem';
+  @IsString() JWT_RETIRED_KEYS_DIR: string = '/secrets/retired-jwt-keys';
   @IsString() JWT_KID_PATH: string = '/secrets/jwt-es256.kid';
 
   /** Grace window for parallel-tab refresh races (ms). Outside it, reuse = theft. */
