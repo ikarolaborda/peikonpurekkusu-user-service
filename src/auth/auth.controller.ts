@@ -20,6 +20,7 @@ import { AuthGuard, CsrfGuard, Principal } from './auth.guard.js';
 import { AuthService, VerifiedPrincipal } from './auth.service.js';
 import { clearAuthCookies, setAuthCookies } from './cookies.js';
 import { LoginDto, MfaVerifyDto, RegisterDto } from './dto.js';
+import { GatewayAssertionFactory } from '../keys/gateway-assertion.factory.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -31,6 +32,7 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly mfa: MfaService,
     private readonly sessions: SessionsService,
+    private readonly gatewayAssertion: GatewayAssertionFactory,
     config: ConfigService,
   ) {
     this.cookiePolicy = {
@@ -173,5 +175,20 @@ export class AuthController {
     // overwrites these from this response, so a client cannot forge them.
     res.setHeader('X-Auth-Amr', principal.amr.join(','));
     res.setHeader('X-Auth-Time', String(principal.authTime));
+
+    // The gateway assertion is what makes the headers above trustworthy on the
+    // internal network, not just at the edge: a signed statement, verifiable by
+    // every service through the JWKS, that this identity came from ForwardAuth.
+    // Without it a peer container could forge X-User-Id and impersonate a user.
+    res.setHeader(
+      'X-Gateway-Assertion',
+      await this.gatewayAssertion.issue({
+        sub: principal.userId,
+        roles: principal.roles,
+        sid: principal.sessionId,
+        amr: principal.amr,
+        auth_time: principal.authTime,
+      }),
+    );
   }
 }

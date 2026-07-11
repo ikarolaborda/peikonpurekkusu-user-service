@@ -24,6 +24,9 @@ export class Env {
   @IsInt() @Min(60) ACCESS_TOKEN_TTL: number = 600;
   @IsInt() @Min(3600) REFRESH_TOKEN_TTL: number = 1209600;
 
+  /** Internal gateway assertion lifetime (s). Short: expiry is the only replay bound on the internal net. */
+  @IsInt() @Min(10) GATEWAY_ASSERTION_TTL: number = 60;
+
   @IsString() JWT_PRIVATE_KEY_PATH: string = '/secrets/jwt-es256-private.pem';
   @IsString() JWT_RETIRED_KEYS_DIR: string = '/secrets/retired-jwt-keys';
   @IsString() JWT_KID_PATH: string = '/secrets/jwt-es256.kid';

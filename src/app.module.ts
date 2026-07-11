@@ -7,12 +7,14 @@ import mikroOrmConfig from '../mikro-orm.config.js';
 import { AuthController } from './auth/auth.controller.js';
 import { AuthGuard, CsrfGuard } from './auth/auth.guard.js';
 import { AuthService } from './auth/auth.service.js';
+import { GatewayAuthMiddleware } from './auth/gateway-auth.middleware.js';
 import { validateEnv } from './config/env.validation.js';
 import { OutboxEvent } from './entities/outbox-event.entity.js';
 import { RefreshToken } from './entities/refresh-token.entity.js';
 import { User } from './entities/user.entity.js';
 import { HealthController } from './health/health.controller.js';
 import { JwksController } from './keys/jwks.controller.js';
+import { GatewayAssertionFactory } from './keys/gateway-assertion.factory.js';
 import { KeysService } from './keys/keys.service.js';
 import { TokenFactory } from './keys/token.factory.js';
 import { EventEnvelopeFactory } from './messaging/event-envelope.factory.js';
@@ -35,6 +37,7 @@ import { UsersController } from './users/users.controller.js';
   providers: [
     KeysService,
     TokenFactory,
+    GatewayAssertionFactory,
     SessionsService,
     AuthService,
     AuthGuard,
@@ -54,5 +57,8 @@ export class AppModule implements NestModule {
         trace.run(req.headers.traceparent as string | undefined, next),
       )
       .forRoutes('*');
+    // Protected read routes must prove a verified identity, not a raw header.
+    // /auth/* (which mints the assertion) and /.well-known are deliberately excluded.
+    consumer.apply(GatewayAuthMiddleware).forRoutes('users');
   }
 }
