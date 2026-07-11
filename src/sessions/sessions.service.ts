@@ -17,6 +17,13 @@ export interface SessionRecord {
   fingerprintHash: string;
   ip: string;
   csrfSecret: string;
+  /**
+   * The password step succeeded but the enrolled second factor has not. Such a
+   * session authenticates (so it can complete MFA and log out) but is refused at
+   * the gateway, so it can reach no protected route. Only elevate() clears it —
+   * refresh reuses the same session id, so rotating tokens cannot launder it.
+   */
+  mfaPending: boolean;
 }
 
 /**
@@ -73,6 +80,7 @@ export class SessionsService implements OnModuleInit, OnModuleDestroy {
         fingerprintHash: record.fingerprintHash,
         ip: record.ip,
         csrfSecret,
+        mfaPending: record.mfaPending ? '1' : '0',
       })
       .expire(key, this.refreshTtlSeconds)
       .sAdd(`user:${record.userId}:sessions`, sessionId)
@@ -91,6 +99,7 @@ export class SessionsService implements OnModuleInit, OnModuleDestroy {
       fingerprintHash: raw.fingerprintHash ?? '',
       ip: raw.ip ?? '',
       csrfSecret: raw.csrfSecret ?? '',
+      mfaPending: raw.mfaPending === '1',
     };
   }
 
@@ -99,10 +108,12 @@ export class SessionsService implements OnModuleInit, OnModuleDestroy {
     await this.client.expire(`session:${sessionId}`, this.refreshTtlSeconds);
   }
 
+  /** The only path that clears mfaPending — proof of the second factor. */
   async elevate(sessionId: string, amr: string[]): Promise<void> {
     await this.client.hSet(`session:${sessionId}`, {
       authTime: String(Math.floor(Date.now() / 1000)),
       amr: amr.join(','),
+      mfaPending: '0',
     });
   }
 

@@ -34,6 +34,9 @@ export interface VerifiedPrincipal {
   jti: string;
   csrfSecret: string;
   expiresAt: Date;
+  amr: string[];
+  authTime: number;
+  mfaPending: boolean;
 }
 
 const sha256 = (value: string): string => createHash('sha256').update(value).digest('hex');
@@ -119,6 +122,7 @@ export class AuthService {
       amr: ['pwd'],
       fingerprintHash: sha256(input.fingerprint || 'unknown'),
       ip: input.ip,
+      mfaPending: user.mfaEnrolled,
     });
 
     const pair = await this.issuePair(em, user, sessionId, randomUUID(), 0, input.fingerprint);
@@ -245,6 +249,9 @@ export class AuthService {
     const session = await this.sessions.get(sessionId);
     if (!session) throw new UnauthorizedException('session expired');
 
+    // Deliberately non-blocking on mfaPending: this same call authenticates
+    // /auth/mfa/verify and logout, which a pending session must still reach.
+    // The gateway's /verify endpoint is what refuses a pending session.
     return {
       userId: payload.sub as string,
       sessionId,
@@ -252,6 +259,9 @@ export class AuthService {
       jti,
       csrfSecret: session.csrfSecret,
       expiresAt: new Date((payload.exp as number) * 1000),
+      amr: session.amr,
+      authTime: session.authTime,
+      mfaPending: session.mfaPending,
     };
   }
 

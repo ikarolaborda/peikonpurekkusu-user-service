@@ -152,6 +152,13 @@ export class AuthController {
     if (!token) throw new UnauthorizedException('not authenticated');
     const principal = await this.auth.verify(token);
 
+    // A password-only session for an MFA-enrolled user gets no further than this.
+    // It stays valid for /auth/* (which bypasses ForwardAuth) so the user can
+    // finish the challenge or log out, but it reaches no protected route.
+    if (principal.mfaPending) {
+      throw new UnauthorizedException('step-up required');
+    }
+
     const method = (req.headers['x-forwarded-method'] as string | undefined)?.toUpperCase() ?? 'GET';
     if (!SAFE_METHODS.has(method)) {
       const headerToken = req.headers['x-csrf-token'] as string | undefined;
@@ -162,5 +169,9 @@ export class AuthController {
     res.setHeader('X-User-Id', principal.userId);
     res.setHeader('X-User-Roles', principal.roles.join(','));
     res.setHeader('X-Session-Id', principal.sessionId);
+    // Authentication strength, so services can gate high-risk operations. Traefik
+    // overwrites these from this response, so a client cannot forge them.
+    res.setHeader('X-Auth-Amr', principal.amr.join(','));
+    res.setHeader('X-Auth-Time', String(principal.authTime));
   }
 }
