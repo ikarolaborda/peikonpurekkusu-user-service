@@ -1,5 +1,6 @@
 import {
   Body,
+  ConflictException,
   Controller,
   Delete,
   ForbiddenException,
@@ -82,6 +83,50 @@ export class AuthController {
     const ok = await this.mfa.verify(principal.sessionId, dto.code);
     if (!ok) throw new UnauthorizedException('invalid code');
     return { elevated: true };
+  }
+
+  // Self-service enrollment. Two steps so the flag flips only after the user
+  // proves they can receive a code — enabling MFA against a channel that cannot
+  // deliver would lock them out of their next login.
+  @Post('mfa/enroll/start')
+  @UseGuards(AuthGuard, CsrfGuard)
+  @HttpCode(202)
+  async mfaEnrollStart(@Principal() principal: VerifiedPrincipal): Promise<void> {
+    if (await this.mfa.isEnrolled(principal.userId)) {
+      throw new ConflictException('already enrolled');
+    }
+    await this.mfa.challenge(principal.sessionId);
+  }
+
+  @Post('mfa/enroll/confirm')
+  @UseGuards(AuthGuard, CsrfGuard)
+  @HttpCode(200)
+  async mfaEnrollConfirm(
+    @Body() dto: MfaVerifyDto,
+    @Principal() principal: VerifiedPrincipal,
+  ): Promise<{ mfa_enrolled: boolean }> {
+    if (await this.mfa.isEnrolled(principal.userId)) {
+      throw new ConflictException('already enrolled');
+    }
+    const ok = await this.mfa.confirmEnrollment(principal.sessionId, principal.userId, dto.code);
+    if (!ok) {
+      throw new UnauthorizedException('invalid code');
+    }
+    return { mfa_enrolled: true };
+  }
+
+  // Turning MFA off is a security downgrade, so it demands a session that has
+  // actually completed MFA (amr includes 'mfa'), not merely a password-only one
+  // — which AuthGuard still lets reach here so mfa-verify and logout keep working.
+  @Post('mfa/disable')
+  @UseGuards(AuthGuard, CsrfGuard)
+  @HttpCode(200)
+  async mfaDisable(@Principal() principal: VerifiedPrincipal): Promise<{ mfa_enrolled: boolean }> {
+    if (!principal.amr.includes('mfa')) {
+      throw new ForbiddenException('recent MFA required to disable');
+    }
+    await this.mfa.disable(principal.userId);
+    return { mfa_enrolled: false };
   }
 
   @Post('refresh')
