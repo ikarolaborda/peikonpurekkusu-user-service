@@ -71,7 +71,7 @@ export class AuthController {
   }
 
   @Post('mfa/verify')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, CsrfGuard)
   @HttpCode(200)
   async mfaVerify(
     @Body() dto: MfaVerifyDto,
